@@ -1,60 +1,72 @@
 import boto3
 from datetime import datetime
 
-def create_missing_crawlers(bucket_name, database_name, role_arn):
+def table_exists(glue, database_name, table_name):
+    try:
+        glue.get_table(DatabaseName=database_name, Name=table_name)
+    except glue.exceptions.EntityNotFoundException:
+        return False
+    return True
+
+def create_missing_crawlers(bucket_name, folder_prefix, database_name, role_arn):
     s3 = boto3.client('s3')
     glue = boto3.client('glue')
     
     # Get all the existing crawlers
     existing_crawlers = glue.get_crawlers()['Crawlers']
 
-    # Get all the folder_types in the bucket
+    # Get all the folders in the bucket
     paginator = s3.get_paginator('list_objects_v2')
-    operation_parameters = {'Bucket': bucket_name, 'Delimiter': '/'}
+    operation_parameters = {'Bucket': bucket_name, 'Prefix': folder_prefix, 'Delimiter': '/'}
     page_iterator = paginator.paginate(**operation_parameters)
 
     for page in page_iterator:
         for prefix in page.get('CommonPrefixes', []):
-            folder_type = prefix['Prefix']  # Use this for crawler path
+            folder_type = prefix['Prefix']
+            table_name = folder_type.rstrip('/').split('/')[-1]
 
-            # Get all the subfolders (exports) for this folder_type
-            operation_parameters = {'Bucket': bucket_name, 'Prefix': folder_type, 'Delimiter': '/'}
-            subfolder_page_iterator = paginator.paginate(**operation_parameters)
+            # Delete the existing table for this folder_type if it exists
+            if table_exists(glue, database_name, table_name):
+                glue.delete_table(DatabaseName=database_name, Name=table_name)
 
-            subfolder_names = []
-            for subfolder_page in subfolder_page_iterator:
-                for subfolder_prefix in subfolder_page.get('CommonPrefixes', []):
-                    subfolder_name = subfolder_prefix['Prefix']
-                    subfolder_names.append(subfolder_name)
-            
-            # Get the latest subfolder
-            latest_subfolder_path = 's3://' + bucket_name + '/' + sorted(subfolder_names, reverse=True)[0]
+            # Get the latest subfolder within the folder_type
+            subfolders = s3.list_objects_v2(Bucket=bucket_name, Prefix=folder_type, Delimiter='/').get('CommonPrefixes')
+            latest_subfolder = sorted(subfolders, key=lambda k: k['Prefix'], reverse=True)[0]
 
-            # Delete the existing table for this folder_type
-            table_name = folder_type.rstrip('/')
-            glue.delete_table(DatabaseName=database_name, Name=table_name)
-            
-            # Create a new crawler for the latest subfolder
-            crawler_name = table_name.replace('/', '-')  # Use this for crawler name
-            new_crawler = {
-                'Name': crawler_name,
-                'Role': role_arn, 
-                'DatabaseName': database_name, 
-                'Targets': {'S3Targets': [{'Path': latest_subfolder_path}]},
-                'SchemaChangePolicy': {
-                    'UpdateBehavior': 'UPDATE_IN_DATABASE',
-                    'DeleteBehavior': 'DEPRECATE_IN_DATABASE'
-                },
-                'RecrawlPolicy': {
-                    'RecrawlBehavior': 'CRAWL_EVERYTHING'
-                },
-                'Description': f'Crawler for {latest_subfolder_path}',
-            }
-            glue.create_crawler(**new_crawler)
-            print(f'Created new crawler {crawler_name} for {latest_subfolder_path}')
+            # Path for the latest folder
+            latest_folder_path = 's3://' + bucket_name + '/' + latest_subfolder['Prefix']
+
+            # Find and delete any existing crawlers with the same path
+            for crawler in existing_crawlers:
+                crawler_path = crawler['Targets']['S3Targets'][0]['Path']
+                if latest_folder_path == crawler_path:
+                    glue.delete_crawler(Name=crawler['Name'])
+                    print(f'Deleted old crawler {crawler["Name"]} for {latest_folder_path}')
+
+            # Check if there's an existing crawler for this folder
+            existing_crawler_names = [crawler['Name'] for crawler in existing_crawlers]
+            if f'{table_name}-last-folder-crawler' not in existing_crawler_names:
+                # Create a new crawler for the folder
+                new_crawler = {
+                    'Name': f'{table_name}-last-folder-crawler',
+                    'Role': role_arn, 
+                    'DatabaseName': database_name, 
+                    'Targets': {'S3Targets': [{'Path': latest_folder_path}]},
+                    'SchemaChangePolicy': {
+                        'UpdateBehavior': 'UPDATE_IN_DATABASE',
+                        'DeleteBehavior': 'DEPRECATE_IN_DATABASE'
+                    },
+                    'RecrawlPolicy': {
+                        'RecrawlBehavior': 'CRAWL_EVERYTHING'
+                    },
+                    'Description': f'Crawler for {latest_folder_path}',
+                }
+                glue.create_crawler(**new_crawler)
+                print(f'Created new crawler {table_name}-last-folder-crawler for {latest_folder_path}')
 
 create_missing_crawlers(
     bucket_name="nba-data-access",
+    folder_prefix="data/",
     database_name="nba-data",
     role_arn="arn:aws:iam::758443678568:role/service-role/AWSGlueServiceRole-NBA-data"
 )
