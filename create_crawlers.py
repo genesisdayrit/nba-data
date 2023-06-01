@@ -35,14 +35,14 @@ def create_missing_crawlers(bucket_name, folder_prefix, database_name, role_arn)
                     'DatabaseName': database_name, 
                     'Targets': {'S3Targets': [{'Path': folder_path}]},
                     'SchemaChangePolicy': {
-                        'UpdateBehavior': 'LOG',
-                        'DeleteBehavior': 'LOG'
+                        'UpdateBehavior': 'UPDATE_IN_DATABASE',
+                        'DeleteBehavior': 'DEPRECATE_IN_DATABASE'
                     },
                     'RecrawlPolicy': {
-                        'RecrawlBehavior': 'CRAWL_NEW_FOLDERS_ONLY'
+                        'RecrawlBehavior': 'CRAWL_EVERYTHING'
                     },
                     'Description': f'Crawler for {folder_path}',
-                    'TablePrefix': f'{folder_name}_',
+                    # 'TablePrefix': f'{folder_name}_',
                 }
                 glue.create_crawler(**new_crawler)
                 print(f'Created new crawler {folder_name} for {folder_path}')
