@@ -21,16 +21,16 @@ def create_missing_crawlers(bucket_name, folder_prefix, database_name, role_arn)
             for crawler in existing_crawlers:
                 crawler_path = crawler['Targets']['S3Targets'][0]['Path']
                 crawler_name = crawler['Name']
-                if folder_path == crawler_path and crawler_name != f'{folder_name}-crawler':
+                if folder_path == crawler_path and crawler_name != f'{folder_name}-initial-crawler' and crawler_name != f'{folder_name}-update-crawler':
                     glue.delete_crawler(Name=crawler_name)
                     print(f'Deleted old crawler {crawler_name} for {folder_path}')
 
             # Check if there's an existing crawler for this folder
             existing_crawler_names = [crawler['Name'] for crawler in existing_crawlers]
-            if f'{folder_name}-crawler' not in existing_crawler_names:
+            if f'{folder_name}-initial-crawler' not in existing_crawler_names and f'{folder_name}-update-crawler' not in existing_crawler_names:
                 # Create a new crawler for the folder
                 new_crawler = {
-                    'Name': f'{folder_name}-crawler',
+                    'Name': f'{folder_name}-initial-crawler',
                     'Role': role_arn, 
                     'DatabaseName': database_name, 
                     'Targets': {'S3Targets': [{'Path': folder_path}]},

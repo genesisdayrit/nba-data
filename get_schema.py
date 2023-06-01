@@ -10,4 +10,4 @@ def get_table_schema(database_name, table_name):
     return [(col['Name'], col['Type']) for col in columns]
 
 # Test the function
-print(get_table_schema('your_database_name', 'your_table_name'))
+print(get_table_schema('nba-data', 'game_details'))
