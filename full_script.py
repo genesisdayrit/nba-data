@@ -45,10 +45,10 @@ def create_missing_crawlers(bucket_name, folder_prefix, database_name, role_arn)
 
             # Check if there's an existing crawler for this folder
             existing_crawler_names = [crawler['Name'] for crawler in existing_crawlers]
-            if f'{table_name}-last-folder-crawler' not in existing_crawler_names:
+            if f'{table_name}-crawler' not in existing_crawler_names:
                 # Create a new crawler for the folder
                 new_crawler = {
-                    'Name': f'{table_name}-last-folder-crawler',
+                    'Name': f'{table_name}-crawler',
                     'Role': role_arn, 
                     'DatabaseName': database_name, 
                     'Targets': {'S3Targets': [{'Path': latest_folder_path}]},
@@ -60,9 +60,10 @@ def create_missing_crawlers(bucket_name, folder_prefix, database_name, role_arn)
                         'RecrawlBehavior': 'CRAWL_EVERYTHING'
                     },
                     'Description': f'Crawler for {latest_folder_path}',
+                    'TablePrefix': f'{table_name}_',
                 }
                 glue.create_crawler(**new_crawler)
-                print(f'Created new crawler {table_name}-last-folder-crawler for {latest_folder_path}')
+                print(f'Created new crawler {table_name}-crawler for {latest_folder_path}')
 
 create_missing_crawlers(
     bucket_name="nba-data-access",
