@@ -13,9 +13,6 @@ def create_missing_crawlers(bucket_name, folder_prefix, database_name, role_arn)
     session = boto3.Session(profile_name='myprofile')
     s3 = session.client('s3')
     glue = session.client('glue')
-    
-    # Get all the existing crawlers
-    existing_crawlers = glue.get_crawlers()['Crawlers']
 
     # Get all the folders in the bucket
     paginator = s3.get_paginator('list_objects_v2')
@@ -38,12 +35,19 @@ def create_missing_crawlers(bucket_name, folder_prefix, database_name, role_arn)
             # Path for the latest folder
             latest_folder_path = 's3://' + bucket_name + '/' + latest_subfolder['Prefix']
 
+            # Get all the existing crawlers
+            existing_crawlers = glue.get_crawlers()['Crawlers']
+
             # Find and delete any existing crawlers with the same path
             for crawler in existing_crawlers:
                 crawler_path = crawler['Targets']['S3Targets'][0]['Path']
-                if latest_folder_path == crawler_path:
+                # Checking if the crawler path starts with the folder prefix, not the full latest sub-folder
+                if crawler_path.startswith('s3://' + bucket_name + '/' + folder_type):
                     glue.delete_crawler(Name=crawler['Name'])
-                    print(f'Deleted old crawler {crawler["Name"]} for {latest_folder_path}')
+                    print(f'Deleted old crawler {crawler["Name"]} for {crawler_path}')
+
+            # Get the updated list of existing crawlers
+            existing_crawlers = glue.get_crawlers()['Crawlers']
 
             # Check if there's an existing crawler for this folder
             existing_crawler_names = [crawler['Name'] for crawler in existing_crawlers]
