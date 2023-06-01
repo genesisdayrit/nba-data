@@ -1,5 +1,6 @@
 import boto3
 from datetime import datetime
+from botocore.exceptions import ClientError
 
 def table_exists(glue, database_name, table_name):
     try:
@@ -9,8 +10,9 @@ def table_exists(glue, database_name, table_name):
     return True
 
 def create_missing_crawlers(bucket_name, folder_prefix, database_name, role_arn):
-    s3 = boto3.client('s3')
-    glue = boto3.client('glue')
+    session = boto3.Session(profile_name='myprofile')
+    s3 = session.client('s3')
+    glue = session.client('glue')
     
     # Get all the existing crawlers
     existing_crawlers = glue.get_crawlers()['Crawlers']
