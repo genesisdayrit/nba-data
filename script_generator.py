@@ -28,7 +28,10 @@ def convert_glue_type_to_redshift(glue_type):
     return mapping.get(glue_type, 'VARCHAR(256)')
 
 def create_table_statement(schema, table):
-    create_table_query = f'DROP TABLE IF EXISTS public.{table}; CREATE TABLE IF NOT EXISTS public.{table} ('
+    # Get the base table name (without the timestamp)
+    base_table_name = table.split('_')[0]
+
+    create_table_query = f'DROP TABLE IF EXISTS public.{base_table_name}; CREATE TABLE IF NOT EXISTS public.{base_table_name} ('
     for column in schema:
         column_name = column['Name']
         redshift_type = convert_glue_type_to_redshift(column['Type'])
@@ -36,6 +39,7 @@ def create_table_statement(schema, table):
             create_table_query += f'{column_name} {redshift_type}, '
     create_table_query = create_table_query[:-2] + ');'
     return create_table_query
+
 
 # Create a session using a specific profile
 session = boto3.Session(profile_name='myprofile')
